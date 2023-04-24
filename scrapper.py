@@ -4,6 +4,8 @@ import requests
 import unicodedata
 from bs4 import BeautifulSoup
 import sqlite3
+import json
+from warnings import warn
 
 
 # Главная функция. Активирует все остальные функции в нужной последовательности
@@ -14,7 +16,9 @@ def scrap_article(link: str) -> None:
     no_unicode = clean_unicode(raw_shortened_info)
     shortened_info = clean_references(no_unicode)
     last_changed = get_last_changed(raw_txt)
-    recompiled_data = recompile(link, title, shortened_info, last_changed)
+    published = get_published(raw_txt)
+    language = get_language(raw_txt)
+    recompiled_data = recompile(link, title, shortened_info, last_changed, published, language)
     add_to_database('wiki.db', recompiled_data)
 
 
@@ -55,15 +59,44 @@ def clean_references(no_unicode) -> str:
 
 
 # Возвращает дату и время последнего изменения страницы
-def get_last_changed(raw_txt: BeautifulSoup) -> str:
-    last_changed = raw_txt.find('li', id='footer-info-lastmod').text.replace(
-        ' Эта страница в последний раз была отредактирована ', '')[:-1]
-    return last_changed
+def get_last_changed(raw_txt: BeautifulSoup) -> str | None:
+    try:
+        data = json.loads(raw_txt.find('script', type='application/ld+json').text)['dateModified']
+        last_changed = re.sub('T', ' ', data)[0:-1]
+        return last_changed
+    except KeyError:
+        warn('! Не удалось найти дату последнего изменения !')
+        return None
+
+
+# Возвращает дату и время создания страницы
+def get_published(raw_txt: BeautifulSoup) -> str | None:
+    try:
+        data = json.loads(raw_txt.find('script', type='application/ld+json').text)['datePublished']
+        published = re.sub('T', ' ', data)[0:-1]
+        return published
+    except KeyError:
+        warn('! Не удалось найти дату создания статьи !')
+        return None
+
+
+# Возвращает язык статьи
+def get_language(raw_txt: BeautifulSoup) -> str | None:
+    try:
+        data = raw_txt.find('script').text
+        data_encoded = data[data.index(re.findall("RLCONF", data)[0]) + 7:data.index(re.findall("RLSTATE", data)[0]) - 1]
+        language = json.loads(data_encoded)['wgVisualEditor']['pageLanguageCode']
+        return language
+    except KeyError:
+        warn('! Не удалось найти язык статьи !')
+        return None
 
 
 # Возвращает словарь, скомпилированный из полученной информации
-def recompile(link: str, title: str, shortened_info: str, last_changed: str) -> dict:
-    recompiled_data = (dict(url=link, title=title, shortened_info=shortened_info, last_changed=last_changed))
+def recompile(link: str, title: str, shortened_info: str, last_changed: str, published: str, language: str) -> dict:
+    recompiled_data = (
+        dict(url=link, title=title, shortened_info=shortened_info, last_changed=last_changed, published=published,
+             language=language))
     return recompiled_data
 
 
@@ -76,16 +109,17 @@ def add_to_database(db_name: str, recompiled_data: dict) -> None:
             url TEXT,
             title TEXT,
             shortened_info TEXT,
-            last_changed TEXT
+            last_changed TEXT,
+            published TEXT,
+            language TEXT
             )""")
-            cur.execute("""INSERT INTO articles VALUES (?, ?, ?, ?)""", (
+            cur.execute("""INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?)""", (
                 recompiled_data['url'], recompiled_data['title'], recompiled_data['shortened_info'],
-                recompiled_data['last_changed']))
+                recompiled_data['last_changed'], recompiled_data['published'], recompiled_data['language']))
             print('Статья записана в БД')
     except Exception as e:
         raise ConnectionError(f'Не удалось выполнить взаимодействие с БД, статья не записана. Ошибка:{e}')
 
 
 if __name__ == '__main__':
-    scrap_article(
-        'https://ru.wikipedia.org/wiki/%D0%A4%D0%B5%D0%B2%D1%80%D0%B0%D0%BB%D1%8C%D1%81%D0%BA%D0%B0%D1%8F_%D0%BB%D0%B0%D0%B7%D1%83%D1%80%D1%8C')
+    scrap_article('https://ru.wikipedia.org/wiki/Marquee_Moon')
