@@ -9,7 +9,7 @@ from warnings import warn
 
 
 # Главная функция. Активирует все остальные функции в нужной последовательности
-def scrap_article(link: str) -> None:
+def scrap_article(link: str, db: str = 'wiki.db') -> None:
     raw_txt = get_raw_txt(link)
     title = get_title(raw_txt)
     raw_shortened_info = get_raw_shortened_info(raw_txt)
@@ -19,7 +19,19 @@ def scrap_article(link: str) -> None:
     published = get_published(raw_txt)
     language = get_language(raw_txt)
     recompiled_data = recompile(link, title, shortened_info, last_changed, published, language)
-    add_to_database('wiki.db', recompiled_data)
+    add_to_database(db, recompiled_data)
+
+
+def check_access(link: str) -> None:
+    server_responce = requests.get(link).status_code
+    if server_responce == 404:
+        raise ConnectionError('Такая страница не существует (404)')
+    elif server_responce == 401:
+        raise ConnectionError('Требуется авторизация (401)')
+    elif server_responce == 403:
+        raise ConnectionError('Нет прав доступа (403)')
+    elif server_responce in range (500-600):
+        raise ConnectionError(f'Ошибка сервера ({server_responce})')
 
 
 # Возвращает HTML-код со страницы википедии
@@ -84,7 +96,8 @@ def get_published(raw_txt: BeautifulSoup) -> str | None:
 def get_language(raw_txt: BeautifulSoup) -> str | None:
     try:
         data = raw_txt.find('script').text
-        data_encoded = data[data.index(re.findall("RLCONF", data)[0]) + 7:data.index(re.findall("RLSTATE", data)[0]) - 1]
+        data_encoded = data[
+                       data.index(re.findall("RLCONF", data)[0]) + 7:data.index(re.findall("RLSTATE", data)[0]) - 1]
         language = json.loads(data_encoded)['wgVisualEditor']['pageLanguageCode']
         return language
     except KeyError:
@@ -122,4 +135,4 @@ def add_to_database(db_name: str, recompiled_data: dict) -> None:
 
 
 if __name__ == '__main__':
-    scrap_article('https://ru.wikipedia.org/wiki/Marquee_Moon')
+    check_access('https://ru.wikipedia.org/wiki/Sssss')
