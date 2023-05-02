@@ -7,7 +7,14 @@ import json
 from warnings import warn
 
 
-def check_access(link: str) -> None:
+def check_link(link: str) -> True:
+    if link[11:20] != 'wikipedia':
+        raise TypeError('Могут приниматься только статьи из Википедии')
+    else:
+        return True
+
+
+def check_access(link: str) -> True:
     server_responce = requests.get(link).status_code
     if server_responce == 404:
         raise ConnectionError('Такая страница не существует (404)')
@@ -15,17 +22,22 @@ def check_access(link: str) -> None:
         raise ConnectionError('Требуется авторизация (401)')
     elif server_responce == 403:
         raise ConnectionError('Нет прав доступа (403)')
-    elif server_responce in range(500 - 600):
+    elif server_responce in range(500, 600):
         raise ConnectionError(f'Ошибка сервера ({server_responce})')
+    elif server_responce in range(100, 400):
+        return True
+    else:
+        raise ConnectionError(f'Неизвестная ошибка ({server_responce})')
 
 
 # Возвращает HTML-код со страницы википедии
 def get_raw_txt(link: str) -> BeautifulSoup:
-    try:
-        raw_txt = BeautifulSoup(requests.get(f'{link}').text, 'lxml')
-        return raw_txt
-    except Exception as e:
-        raise ConnectionError(f'Не удалось получить данные с сайта. Ошибка: {e}')
+    if check_link(link) and check_access(link):
+        try:
+            raw_txt = BeautifulSoup(requests.get(f'{link}').text, 'lxml')
+            return raw_txt
+        except Exception as e:
+            raise ProcessLookupError(f'Не удалось получить данные с сайта. Ошибка: {e}')
 
 
 # Возвращает заголовок статьи из HTML-кода

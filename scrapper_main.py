@@ -4,7 +4,6 @@ from scrapper_database_interactor import add_to_database
 
 # Главная функция. Активирует все остальные функции в нужной последовательности
 def scrap_article(link: str, db: str = 'wiki.db') -> None:
-    check_access(link)
     raw_txt = get_raw_txt(link)
     title = get_title(raw_txt)
     raw_shortened_info = get_raw_shortened_info(raw_txt)
